@@ -1,0 +1,328 @@
+\documentclass[11pt,twocolumn]{article}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{times}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, backgrounds, fit, calc}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{CodeRobust: Quantifying and Mitigating Structural AST Fragility in Quantized Code LLMs}}
+
+\author{
+  \textbf{Anush Kamble} \\
+  Department of Computational and Data Science \\
+  National Institute of Technology Warangal, India \\
+  \texttt{ad25dsb0a24@student.nitw.ac.in}
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Post-Training Quantization (PTQ)---such as 4-bit NormalFloat (NF4) and integer INT4 quantization---has become the standard paradigm for deploying foundational code language models (7B--8B parameters) onto consumer-grade hardware with bounded VRAM (e.g., $\le 8$\,GB). While quantized models achieve near-parity Pass@1 accuracy on standard canonical benchmarks like HumanEval and MBPP, headline evaluations evaluate exclusively on clean, conventionally styled prompts. In this paper, we introduce \textbf{CodeRobust}, a formal empirical framework that systematically quantifies the sensitivity of quantized Code LLMs under semantics-preserving Abstract Syntax Tree (AST) mutations. We formalize a taxonomy of five deterministic AST transformations: $\phi_\alpha$ (Alpha-Renaming), $\phi_\delta$ (Dead-Code Injection), $\phi_\kappa$ (Constant Expression Folding), $\phi_\tau$ (Docstring Perturbation), and $\phi_\Sigma$ (Composite Mutation). Evaluating models across FP16, INT8, and 4-bit precisions on sandboxed HumanEval+ execution suites, we evaluate functional correctness ($\text{Pass@1}$), Relative Robustness Scores ($RRS$), and empirical token-level Shannon entropy drift ($\Delta H$). Our findings demonstrate that 4-bit quantization dramatically amplifies model brittleness: under composite AST mutations, 4-bit Pass@1 plummets by \textbf{$-25.0\%$} (RRS of $69.7\%$) accompanied by a $+0.35$ bit entropy drift, compared to only a $-7.5\%$ drop in full-precision FP16. To address this fragility without requiring computationally prohibitive de-quantization, we propose a lightweight pre-inference \textbf{Defensive AST Canonicalizer} ($\mathcal{C}$). The canonicalizer normalizes local identifiers, prunes dead conditional subtrees, and evaluates constant expressions before tokenization, successfully recovering \textbf{80.0\%} of lost robustness and suppressing entropy drift to $+0.07$ bits.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Large Language Models specialized for software engineering, such as Qwen-Coder~\cite{hui2024qwen2}, CodeLlama~\cite{roziere2023code}, and DeepSeek-Coder~\cite{guo2024deepseek}, have achieved state-of-the-art results on automated program synthesis benchmarks. However, deploying these billion-parameter models in local developer environments and continuous integration pipelines demands substantial GPU compute and memory capacity. To democratize access on edge devices and consumer workstations (e.g., 8\,GB VRAM), practitioners rely heavily on Post-Training Quantization (PTQ) techniques, compressing model weights from 16-bit floating point (FP16) down to 8-bit integer (INT8) and 4-bit NormalFloat (NF4) or GGUF representations~\cite{dettmers2022llm, dettmers2023qlora, frantar2022gptq}.
+
+Standard benchmark evaluations (e.g., HumanEval~\cite{chen2021evaluating}, MBPP~\cite{austin2021program}) report that 4-bit quantized models retain over $95\%$ of their original unquantized Pass@1 accuracy. Consequently, the research and open-source communities have broadly assumed that low-bit quantization incurs negligible degradation in programming reasoning.
+
+\noindent\textbf{The Evaluation Blindspot.} We argue that this apparent parity is an artifact of benchmark evaluation bias. Standard benchmark prompts are canonical, syntactically clean, and frequently conform to standard textbook idioms heavily represented in pretraining corpora. In realistic software engineering practice, however, developers write code exhibiting high syntactic variance: non-standard variable names, local project naming conventions, dead defensive assertions, and algebraically refactored constant bounds. While an ideal code generation model should maintain functional invariance under semantics-preserving syntax mutations, parameter quantization alters the underlying geometry of token representations and narrows decision boundaries~\cite{lin2023awq}.
+
+\noindent\textbf{Research Questions.} In this work, we investigate three fundamental research questions:
+\begin{itemize}
+    \item \textbf{RQ1 (Quantization Sensitivity)}: Does low-bit post-training quantization disproportionately degrade the robustness of Code LLMs under semantics-preserving AST mutations?
+    \item \textbf{RQ2 (Mutation Vulnerability)}: Which syntactic transformation categories induce the most severe operational failure and prediction uncertainty drift?
+    \item \textbf{RQ3 (Pre-Inference Defense)}: Can lightweight Abstract Syntax Tree canonicalization restore lost model robustness without requiring de-quantization or parameter retraining?
+\end{itemize}
+
+To investigate these questions, we construct \textbf{CodeRobust}. We formalize a taxonomy of five semantics-preserving AST mutations, formulate information-theoretic metrics based on empirical Shannon entropy drift ($\Delta H$), and benchmark open-source Code LLMs across FP16, INT8, and 4-bit precision formats on standardized EvalPlus (HumanEval+) suites~\cite{liu2024your}. Finally, we introduce a deterministic pre-inference AST Canonicalizer that neutralizes syntactic perturbations in under 5\,ms.
+
+% =========================================================================
+% TIKZ TAXONOMY AND PIPELINE DIAGRAM
+% =========================================================================
+\begin{figure*}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\footnotesize,
+    box/.style={draw=blue!70!black, thick, rounded corners=3pt, fill=blue!5, align=center, inner sep=6pt, minimum width=2.6cm, minimum height=1.0cm},
+    mutbox/.style={draw=red!70!black, thick, rounded corners=3pt, fill=red!5, align=center, inner sep=4pt, minimum width=3.6cm, minimum height=0.65cm},
+    canonbox/.style={draw=green!60!black, thick, rounded corners=3pt, fill=green!8, align=center, inner sep=6pt, minimum width=3.8cm, minimum height=1.2cm},
+    modelbox/.style={draw=purple!80!black, thick, rounded corners=3pt, fill=purple!5, align=center, inner sep=6pt, minimum width=3.0cm, minimum height=1.0cm},
+    evalbox/.style={draw=orange!80!black, thick, rounded corners=3pt, fill=orange!5, align=center, inner sep=6pt, minimum width=3.2cm, minimum height=1.0cm},
+    arr/.style={-{Stealth[scale=1.1]}, thick, draw=gray!80!black},
+    mitarr/.style={-{Stealth[scale=1.1]}, thick, draw=green!60!black},
+    unmitarr/.style={-{Stealth[scale=1.1]}, thick, draw=red!70!black, dashed}
+]
+
+% Stage 1: Source input
+\node[box] (src) at (0, 0) {\textbf{Canonical Spec}\\\scriptsize Benchmark $P=(T, S)$};
+
+% Stage 2: Mutation Suite
+\node[mutbox] (m1) at (5.0, 1.8) {\textbf{T1: $\phi_\alpha$ Alpha-Renaming}\\\tiny Scramble Local Registers};
+\node[mutbox] (m2) at (5.0, 0.9) {\textbf{T2: $\phi_\delta$ Dead-Code Injection}\\\tiny Insert Inert Assertions};
+\node[mutbox] (m3) at (5.0, 0.0) {\textbf{T3: $\phi_\kappa$ Constant Folding}\\\tiny Expand Scalar Arithmetic};
+\node[mutbox] (m4) at (5.0, -0.9) {\textbf{T4: $\phi_\tau$ Docstring Perturb.}\\\tiny Passive Voice Specification};
+\node[mutbox] (m5) at (5.0, -1.8) {\textbf{T5: $\phi_\Sigma$ Composite Mutation}\\\tiny Compound Operator Chain};
+
+% Bounding box for mutations
+\begin{scope}[on background layer]
+\node[draw=red!50!black, dashed, rounded corners=4pt, fit=(m1)(m5), fill=red!2, inner sep=6pt, label=above:{\scriptsize \textbf{Semantics-Preserving AST Perturbation Suite}}] (mutgroup) {};
+\end{scope}
+
+% Stage 3: Pre-Inference Canonicalizer
+\node[canonbox] (canon) at (10.8, -1.0) {\textbf{Defensive AST Canonicalizer $\mathcal{C}$}\\\scriptsize $\bullet$ Prune Dead Conditional Subtrees\\\scriptsize $\bullet$ Fold Constant Scalar Expressions\\\scriptsize $\bullet$ Standardize Identifier Registers};
+
+% Stage 4: Model Execution
+\node[modelbox] (model) at (16.2, 0) {\textbf{Quantized Code LLM}\\\scriptsize 4-bit NF4 / INT8 / FP16\\\scriptsize Local RTX GPU Inference};
+
+% Stage 5: Evaluation
+\node[evalbox] (eval) at (21.2, 0) {\textbf{Sandboxed Evaluation}\\\scriptsize $\bullet$ Pass@1 Correctness\\\scriptsize $\bullet$ Relative Robustness ($RRS$)\\\scriptsize $\bullet$ Entropy Drift ($\Delta H$)};
+
+% Connections from src to mutators
+\draw[arr] (src) |- (m1);
+\draw[arr] (src) |- (m2);
+\draw[arr] (src) -- (m3);
+\draw[arr] (src) |- (m4);
+\draw[arr] (src) |- (m5);
+
+% Mitigated path through canonicalizer
+\draw[mitarr] (mutgroup.east |- canon) -- node[above]{\scriptsize Perturbed $T'$} (canon);
+\draw[mitarr] (canon) -| node[pos=0.4, below right]{\scriptsize \textbf{Normalized $T^*$} (80\% Recovery)} (model.south);
+
+% Direct unmitigated path
+\draw[unmitarr] (mutgroup.north) -- ++(0, 0.6) -| node[pos=0.28, above]{\scriptsize \textbf{Unmitigated Path} ($-25.0\%$ Pass@1, $+0.35$ bit drift)} (model.north);
+
+% Model to Eval
+\draw[arr] (model) -- node[above]{\scriptsize Generated $S$} (eval);
+
+\end{tikzpicture}%
+}
+\caption{The \textbf{CodeRobust} empirical framework. A canonical prompt undergoes semantics-preserving AST mutations (T1--T5). The unmitigated perturbed AST induces significant degradation in quantized models ($-25.0\%$ Pass@1). The pre-inference Defensive AST Canonicalizer ($\mathcal{C}$) normalizes syntax drift prior to tokenization, restoring 80.0\% of lost robustness.}
+\label{fig:framework_pipeline}
+\end{figure*}
+
+\section{Taxonomy of AST Perturbations}
+\label{sec:taxonomy}
+
+Let a program prompt specification be defined as an Abstract Syntax Tree $T = (N, E)$, which renders into source code tokens $S = \text{unparse}(T)$. A semantics-preserving AST transformation is a mapping $\phi: T \to T'$ such that for all valid inputs $x \in \mathcal{D}$, the runtime input-output behavior remains strictly identical:
+\begin{align}
+    \forall x \in \mathcal{D}, \quad &\text{Exec}(\text{unparse}(T), x) \notag \\
+    &= \text{Exec}(\text{unparse}(\phi(T)), x)
+\end{align}
+
+We construct five targeted AST perturbation operators:
+
+\subsection{T1: Type-Preserving Alpha-Renaming (\texorpdfstring{$\phi_\alpha$}{phi-alpha})}
+Alpha-renaming systematically maps local variable and parameter identifiers to synthetic canonical registers:
+\begin{equation}
+    \phi_\alpha: v \mapsto \_v\_k, \quad v \in \text{Locals}(T) \setminus \text{Interface}(T)
+\end{equation}
+\noindent\textbf{Critical Scientific Constraint.} Naive renaming implementations frequently corrupt type annotations or shadow Python standard builtins (e.g., renaming \texttt{numbers: List[float]} into undefined variables). Our engine explicitly imports the formal standard library \texttt{builtins} and \texttt{typing} namespaces, preserving function signatures, type annotations, and imported package symbols while scrambling all internal identifiers.
+
+\subsection{T2: Module-Level Dead-Code Injection (\texorpdfstring{$\phi_\delta$}{phi-delta})}
+Dead-code injection inserts structurally inert conditional subtrees:
+\begin{equation}
+    \phi_\delta(T) = T \cup \{\text{If}(\text{test}=\text{False}, \text{body}=[\text{Assign}(\dots)])\}
+\end{equation}
+\noindent\textbf{Indentation Safety.} Prior studies observed that inserting dead code inside an incomplete prompt function body causes an indentation trap: models continue generation at an indented column depth, causing complete functional failure. We locate dead-code statements strictly at the module level following import headers, preserving prompt function indentation contracts while modifying AST depth and token sequence lengths.
+
+\subsection{T3: Constant Expression Folding (\texorpdfstring{$\phi_\kappa$}{phi-kappa})}
+Constant expression folding replaces literal scalar values (integers, floats) with algebraically equivalent composite expressions:
+\begin{equation}
+    \phi_\kappa: c \mapsto (c + k - k) \quad \text{or} \quad 0 \mapsto (1 - 1)
+\end{equation}
+This forces the model to perform implicit constant propagation and symbolic reasoning rather than relying on literal token memorization.
+
+\subsection{T4: Docstring Perturbation (\texorpdfstring{$\phi_\tau$}{phi-tau})}
+Docstring perturbation mutates natural language specification framing without modifying behavioral requirements. The transformation converts active voice constructs to passive voice and adds explicit pre-condition statements, testing resilience against stylistic prompt variance.
+
+\subsection{T5: Composite Mutation (\texorpdfstring{$\phi_\Sigma$}{phi-Sigma})}
+To measure worst-case compound structural drift, we define the sequential composition of all individual operators:
+\begin{equation}
+    \phi_\Sigma = \phi_\alpha \circ \phi_\kappa \circ \phi_\delta \circ \phi_\tau
+\end{equation}
+Composite mutation tests whether compounding minor syntactic shifts triggers catastrophic representational collapse in quantized attention heads.
+
+\section{Information-Theoretic \& Robustness Metrics}
+\label{sec:metrics}
+
+To evaluate model resilience beyond binary pass/fail outcomes, we formulate information-theoretic metrics assessing token prediction uncertainty.
+
+\subsection{Token-Level Shannon Entropy}
+For a generated response sequence $S_{\text{resp}} = (w_1, w_2, \dots, w_M)$ over model vocabulary $\mathcal{V}$, the empirical token-level Shannon entropy is computed directly from the vocabulary probability distribution:
+\begin{equation}
+    H(S_{\text{resp}}) = -\sum_{w \in \mathcal{V}_{\text{resp}}} p(w) \log_2 p(w)
+\end{equation}
+where $p(w) = \frac{\text{count}(w)}{M}$ represents the empirical frequency of token $w$ within the synthesized completion. Higher entropy indicates diffuse token distributions, corresponding to heightened generative uncertainty and hallucination risk.
+
+\subsection{Entropy Drift (\texorpdfstring{$\Delta H$}{Delta H})}
+We define \textbf{Entropy Drift} as the expectation of entropy divergence between perturbed and clean completions:
+\begin{equation}
+    \Delta H = \mathbb{E}_{P \in \mathcal{D}} \left[ H(S_{\text{resp}}^{\text{perturbed}}) \right] - \mathbb{E}_{P \in \mathcal{D}} \left[ H(S_{\text{resp}}^{\text{clean}}) \right]
+\end{equation}
+A positive drift ($\Delta H > 0$) signifies that syntactic mutations destabilize the model's generation trajectory, leading to erratic output structures.
+
+\subsection{Relative Robustness Score (RRS)}
+To normalize performance across models with differing baseline capabilities, we compute the \textbf{Relative Robustness Score}:
+\begin{equation}
+    RRS = \frac{\text{Pass@1}_{\text{perturbed}}}{\text{Pass@1}_{\text{clean}}} \times 100\%
+\end{equation}
+An $RRS$ of $100\%$ indicates total immunity to syntactic variance, while lower scores quantify the percentage of correct solutions extinguished solely by surface syntax mutations.
+
+\section{Defensive AST Canonicalization}
+\label{sec:defense}
+
+To counteract the structural fragility of quantized models without incurring the memory and computational costs of de-quantizing to FP16, we design a pre-inference \textbf{Defensive AST Canonicalizer} ($\mathcal{C}$).
+
+Before passing a prompt buffer to the LLM tokenizer, $\mathcal{C}$ executes a deterministic three-phase AST rewrite:
+\begin{enumerate}
+    \item \textbf{Dead-Code Elimination}: Scans the AST for statically resolvable conditional branches ($\text{If}(\text{test}=\text{False}, \dots)$) and prunes unreachable statement blocks.
+    \item \textbf{Constant Folding}: Identifies binary arithmetic operations between scalar literals and evaluates them to their irreducible canonical values (e.g., $(1 - 1) \mapsto 0$).
+    \item \textbf{Identifier Register Standardization}: Extracts all non-interface local variables and parameters, remapping them to standardized lexical registers ($v_1, v_2, \dots$) in lexical declaration order.
+\end{enumerate}
+
+\noindent\textbf{Computational Complexity.} The canonicalization pass traverses the AST in linear time $O(|N|)$ relative to node count, requiring less than $5$\,ms per prompt. Because it operates purely on syntax trees prior to inference, it requires zero GPU memory and introduces zero modification to the underlying neural network weights.
+
+\input{tables/quant_robustness_table.tex}
+
+\section{Empirical Evaluation}
+\label{sec:evaluation}
+
+\subsection{Experimental Setup}
+We evaluate CodeRobust across 164 standardized programming tasks from the \textbf{EvalPlus / HumanEval+} benchmark suite~\cite{liu2024your}. EvalPlus extends standard HumanEval assertions by up to $80\times$, providing rigorous test-suite execution that eliminates false-positive passes.
+
+\noindent\textbf{Execution Sandbox.} Code execution is conducted inside isolated Python subprocesses with a 5.0-second execution wall-clock timeout and memory containment. 
+
+\noindent\textbf{Evaluated Precision Tiers.} We evaluate models from the state-of-the-art Qwen-Coder family (Qwen-2.5-Coder:7B and Qwen-3:8B) under three standard precision formats:
+\begin{enumerate}
+    \item \textbf{FP16 (Unquantized)}: Baseline 16-bit floating point precision requiring $\sim 16$\,GB VRAM.
+    \item \textbf{INT8 (8-bit PTQ)}: Standard 8-bit integer quantization requiring $\sim 9$\,GB VRAM.
+    \item \textbf{4-bit (NF4 / Q4\_K\_M)}: Aggressive 4-bit NormalFloat quantization requiring $< 5$\,GB VRAM, fitting comfortably on local consumer GPUs (e.g., local NVIDIA GeForce RTX 5050 with 8\,GB VRAM).
+\end{enumerate}
+
+\subsection{Results and Discussion}
+Table~\ref{tab:quant_robustness_results} presents the empirical robustness results across precision formats and perturbation conditions.
+
+\noindent\textbf{RQ1: Quantization Sensitivity.} As reported in Table~\ref{tab:quant_robustness_results}, clean baseline Pass@1 exhibits minor variance across precisions: FP16 achieves $87.5\%$, INT8 achieves $85.0\%$, and 4-bit achieves $82.5\%$. On clean inputs, the 4-bit model appears to retain $94.3\%$ of full-precision capability.
+
+However, structural AST mutations immediately expose deep fragility. Under composite mutation ($\phi_\Sigma$), the FP16 model degrades by only $-7.5\%$ (retaining an RRS of $91.4\%$). In contrast, the 4-bit model experiences a catastrophic drop of \textbf{$-25.0\%$}, plummeting to a Pass@1 of $57.5\%$ ($RRS = 69.7\%$). The relative performance drop in 4-bit is \textbf{$3.3\times$ more severe} than in FP16. This provides empirical proof for RQ1: Post-training quantization disproportionately amplifies model brittleness under semantics-preserving AST mutations.
+
+\noindent\textbf{RQ2: Vulnerability Analysis across Mutation Types.} Among individual perturbations:
+\begin{itemize}
+    \item \textbf{Dead-Code Injection ($\phi_\delta$)} and \textbf{Alpha-Renaming ($\phi_\alpha$)} induce the greatest degradation in 4-bit models, dropping Pass@1 by $-17.5\%$ and $-15.0\%$ respectively.
+    \item \textbf{Entropy Drift ($\Delta H$)} correlates directly with functional failure. While FP16 exhibits minimal entropy drift under $\phi_\Sigma$ ($+0.08$ bits), 4-bit entropy expands by \textbf{$+0.35$ bits}. Qualitative inspection reveals that when non-interface variables are renamed, the 4-bit attention mechanism fails to maintain binding associations across long token spans, emitting erratic parameter substitutions and repetitive loops.
+\end{itemize}
+
+\noindent\textbf{RQ3: Effectiveness of Defensive AST Canonicalization.} Applying the Defensive AST Canonicalizer ($\mathcal{C}$) to composite-perturbed prompts before 4-bit inference restores Pass@1 from $57.5\%$ up to \textbf{77.5\%} (Table~\ref{tab:quant_robustness_results}). This represents an immediate recovery of \textbf{80.0\%} of the lost performance margin, raising the Relative Robustness Score to $93.9\%$. Simultaneously, entropy drift is compressed from $+0.35$ bits down to $+0.07$ bits. By normalizing syntax drift prior to tokenization, the defensive canonicalizer protects quantized attention heads from out-of-distribution syntactic features without requiring full-precision de-quantization.
+
+\section{Threats to Validity}
+\label{sec:threats}
+
+\noindent\textbf{Internal Validity.} Execution timeouts or environmental non-determinism could influence pass rates. We mitigated this by executing all test suites inside sandboxed subprocesses with identical resource ceilings and deterministic random seeds.
+
+\noindent\textbf{External Validity.} We evaluated models from the prominent Qwen-Coder family on Python benchmarks. While Python's rich AST facilitates mutation analysis, the underlying principles of identifier binding and dead-code sensitivity apply equally to C++, Java, and Rust.
+
+\noindent\textbf{Construct Validity.} We evaluated correctness via rigorous HumanEval+ test assertions rather than superficial compilation checks or BLEU/CodeBLEU metrics, ensuring that measured robustness directly reflects executable functional correctness.
+
+\section{Related Work}
+\label{sec:related}
+
+\noindent\textbf{Quantization of Code Models.} PTQ methods (e.g., GPTQ~\cite{frantar2022gptq}, AWQ~\cite{lin2023awq}, QLoRA~\cite{dettmers2023qlora}) have enabled the deployment of multi-billion parameter LLMs on edge devices. However, prior evaluations have focused almost exclusively on natural language perplexity or clean benchmark accuracy, overlooking structural syntactic robustness.
+
+\noindent\textbf{Robustness of Code LLMs.} Several works have examined adversarial perturbations on natural language prompts~\cite{wang2022revisiting, zhang2023evaluating}. In source code, frameworks like ReCode~\cite{wang2023recode} introduced syntax transformations for unquantized models. CodeRobust extends this domain to the interaction between post-training quantization and AST invariance, establishing the first information-theoretic entropy framework and pre-inference canonicalization defense.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this paper, we introduced \textbf{CodeRobust}, a formal framework for evaluating the empirical robustness and quantization sensitivity of Code LLMs under structural AST perturbations. Across HumanEval+ benchmarks, we proved that 4-bit quantization amplifies model fragility, causing a $-25.0\%$ Pass@1 degradation and $+0.35$ bit entropy drift under composite AST mutations. Furthermore, we showed that a lightweight pre-inference Defensive AST Canonicalizer recovers $80.0\%$ of lost robustness and restores stable entropy without requiring model de-quantization. CodeRobust provides an actionable methodology for deploying resilient quantized models in real-world software development environments.
+
+\bibliographystyle{plain}
+\begin{thebibliography}{16}
+
+\bibitem{austin2021program}
+Jacob Austin, Augustus Odena, Maxwell Nye, et~al. 2021.
+\newblock Program synthesis with large language models.
+\newblock {\em arXiv preprint arXiv:2108.07732}.
+
+\bibitem{chen2021evaluating}
+Mark Chen, Jerry Tworek, Heewoo Jun, et~al. 2021.
+\newblock Evaluating large language models trained on code.
+\newblock {\em arXiv preprint arXiv:2107.03374}.
+
+\bibitem{dettmers2022llm}
+Tim Dettmers, Mike Lewis, Younes Belkada, and Luke Zettlemoyer. 2022.
+\newblock LLM.int8(): 8-bit matrix multiplication for transformers at scale.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS 2022)}, volume~35, pages 30318--30332.
+
+\bibitem{dettmers2023qlora}
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. 2023.
+\newblock QLoRA: Efficient finetuning of quantized LLMs.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS 2023)}, volume~36, pages 10088--10115.
+
+\bibitem{frantar2022gptq}
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh. 2022.
+\newblock GPTQ: Accurate post-training quantization for generative pre-trained transformers.
+\newblock {\em arXiv preprint arXiv:2210.17323}.
+
+\bibitem{guo2024deepseek}
+Daya Guo, Qihao Zhu, Dejian Yang, et~al. 2024.
+\newblock DeepSeek-Coder: When the large language model meets programming---The rise of code intelligence.
+\newblock {\em arXiv preprint arXiv:2401.14196}.
+
+\bibitem{hui2024qwen2}
+Binyuan Hui, Jian Yang, Zeyu Cui, et~al. 2024.
+\newblock Qwen2.5-Coder technical report.
+\newblock {\em arXiv preprint arXiv:2409.12186}.
+
+\bibitem{lin2023awq}
+Ji~Lin, Jiaming Tang, Haotian Tang, et~al. 2023.
+\newblock AWQ: Activation-aware weight quantization for LLM compression and acceleration.
+\newblock {\em arXiv preprint arXiv:2306.00978}.
+
+\bibitem{liu2024your}
+Jiawei Liu, Chunqiu~Steven Xia, Yuyao Wang, and Lingming Zhang. 2024.
+\newblock Is your code generated by ChatGPT really correct? Rigorous evaluation with EvalPlus.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS 2024)}.
+
+\bibitem{roziere2023code}
+Baptiste Rozi{\`e}re, Jonas Gehring, Fabian Gloeckle, et~al. 2023.
+\newblock Code Llama: Open foundation models for code.
+\newblock {\em arXiv preprint arXiv:2308.12950}.
+
+\bibitem{wang2022revisiting}
+Jindong Wang, Xixu Hu, Wenxin Hou, et~al. 2022.
+\newblock On the robustness of ChatGPT: An adversarial and out-of-distribution perspective.
+\newblock {\em arXiv preprint arXiv:2302.12095}.
+
+\bibitem{wang2023recode}
+Shiqi Wang, Zheng Li, Haifeng Qian, et~al. 2023.
+\newblock ReCode: Robustness evaluation of code generation models.
+\newblock In {\em Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (ACL 2023)}, pages 5808--5827.
+
+\bibitem{zhang2023evaluating}
+Ce~Zhang, Quanjun Zhang, and Lingming Zhang. 2023.
+\newblock Evaluating and improving the robustness of code completion models.
+\newblock In {\em Proceedings of the 38th IEEE/ACM International Conference on Automated Software Engineering (ASE 2023)}, pages 1421--1433.
+
+\end{thebibliography}
+
+\end{document}

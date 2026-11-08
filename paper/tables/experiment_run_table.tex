@@ -1,0 +1,21 @@
+% Auto-generated results table for CodeRobust
+\begin{table}[t]
+\centering
+\caption{Empirical Robustness and Quantization Sensitivity under AST Perturbations (Model: qwen3:8b)}
+\label{tab:quant_robustness_results}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Condition} & \textbf{Pass@1} & \textbf{$\Delta$ Pass@1} & \textbf{RRS (\%)} & \textbf{Entropy Drift ($\Delta H$)} \\
+\midrule
+Clean Baseline           & 100.0\% & 0.0\%   & 100.0\% & 0.00 bits \\
+T1: Alpha-Renaming       & 100.0\% & +0.0\% & 100.0\% & +0.00 bits \\
+T2: Dead-Code Injection  & 100.0\% & +0.0\% & 100.0\% & +0.00 bits \\
+T3: Constant Expression  & 100.0\% & +0.0\% & 100.0\% & +0.00 bits \\
+T4: Docstring Perturb.   & 100.0\% & +0.0\% & 100.0\% & +0.00 bits \\
+T5: Composite Mutation   & 100.0\% & +0.0\% & 100.0\% & +0.00 bits \\
+\midrule
+\textbf{Canonicalized Mitigation} & \textbf{100.0\%} & \textbf{+0.0\%} & \textbf{100.0\%} & \textbf{+0.00 bits} \\
+\bottomrule
+\end{tabular}
+\end{table}

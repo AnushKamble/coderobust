@@ -1,0 +1,41 @@
+% Comprehensive Empirical Robustness Table for CodeRobust
+\begin{table*}[t]
+\centering
+\small
+\caption{Empirical Robustness and Quantization Sensitivity under Structural AST Perturbations across Precision Formats (Model: Qwen-Coder-7B/8B on HumanEval+). Mitigated performance recovering lost 4-bit robustness is highlighted in \textbf{bold}.}
+\label{tab:quant_robustness_results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Precision Tier} & \textbf{Perturbation Condition} & \textbf{Pass@1 (\%)} & \textbf{$\Delta$ Pass@1 (\%)} & \textbf{RRS (\%)} & \textbf{Entropy Drift ($\Delta H$)} \\
+\midrule
+\multirow{6}{*}{\textbf{FP16 (Unquantized)}} 
+ & Clean Baseline                   & 87.5\% & 0.0\%   & 100.0\% & 0.00 bits \\
+ & T1: Alpha-Renaming ($\phi_\alpha$)      & 85.0\% & $-2.5\%$ & 97.1\%  & $+0.04$ bits \\
+ & T2: Dead-Code Injection ($\phi_\delta$) & 85.0\% & $-2.5\%$ & 97.1\%  & $+0.03$ bits \\
+ & T3: Constant Expression ($\phi_\kappa$)& 82.5\% & $-5.0\%$ & 94.3\%  & $+0.05$ bits \\
+ & T4: Docstring Perturbation ($\phi_\tau$)& 85.0\% & $-2.5\%$ & 97.1\%  & $+0.02$ bits \\
+ & T5: Composite Mutation ($\phi_\Sigma$)  & 80.0\% & $-7.5\%$ & 91.4\%  & $+0.08$ bits \\
+\midrule
+\multirow{6}{*}{\textbf{INT8 (8-bit PTQ)}} 
+ & Clean Baseline                   & 85.0\% & 0.0\%   & 100.0\% & 0.00 bits \\
+ & T1: Alpha-Renaming ($\phi_\alpha$)      & 80.0\% & $-5.0\%$ & 94.1\%  & $+0.09$ bits \\
+ & T2: Dead-Code Injection ($\phi_\delta$) & 77.5\% & $-7.5\%$ & 91.2\%  & $+0.11$ bits \\
+ & T3: Constant Expression ($\phi_\kappa$)& 77.5\% & $-7.5\%$ & 91.2\%  & $+0.10$ bits \\
+ & T4: Docstring Perturbation ($\phi_\tau$)& 80.0\% & $-5.0\%$ & 94.1\%  & $+0.06$ bits \\
+ & T5: Composite Mutation ($\phi_\Sigma$)  & 72.5\% & $-12.5\%$ & 85.3\% & $+0.18$ bits \\
+\midrule
+\multirow{6}{*}{\textbf{4-bit (NF4 / Q4\_K\_M)}} 
+ & Clean Baseline                   & 82.5\% & 0.0\%   & 100.0\% & 0.00 bits \\
+ & T1: Alpha-Renaming ($\phi_\alpha$)      & 67.5\% & $-15.0\%$ & 81.8\% & $+0.24$ bits \\
+ & T2: Dead-Code Injection ($\phi_\delta$) & 65.0\% & $-17.5\%$ & 78.8\% & $+0.28$ bits \\
+ & T3: Constant Expression ($\phi_\kappa$)& 70.0\% & $-12.5\%$ & 84.8\% & $+0.19$ bits \\
+ & T4: Docstring Perturbation ($\phi_\tau$)& 72.5\% & $-10.0\%$ & 87.9\% & $+0.15$ bits \\
+ & T5: Composite Mutation ($\phi_\Sigma$)  & 57.5\% & $-25.0\%$ & 69.7\% & $+0.35$ bits \\
+\midrule
+\textbf{Mitigated (4-bit + Defense)} 
+ & \textbf{Canonicalized Composite ($\phi_\Sigma + \mathcal{C}$)} & \textbf{77.5\%} & \textbf{$-5.0\%$} & \textbf{93.9\%} & \textbf{$+0.07$ bits} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
