@@ -61,10 +61,20 @@ However, **CodeRobust** reveals that low-bit quantization disproportionately mag
 
 ---
 
-## 2. Directory Structure
+## 2. Architecture Summary
+
+CodeRobust investigates and mitigates semantic fragility in low-bit quantized Code LLMs:
+- **AST Perturbation Engine (`coderobust.mutators`)**: Applies semantics-preserving Abstract Syntax Tree transformations (alpha-renaming, dead code injection, constant subexpression folding, docstring perturbation, and composite attacks) without modifying program specifications.
+- **Inference & Execution Backends (`coderobust.models`)**: Supports local quantized LLM inference via Ollama (`qwen3:8b`, `qwen2.5-coder`) as well as an offline deterministic mock backend for instant continuous integration.
+- **Evaluation Sandbox & Information-Theoretic Metrics (`coderobust.metrics`)**: Measures output correctness with pass@k in isolated subprocess execution sandboxes and computes Shannon token entropy, Entropy Drift ($\Delta H$), and Relative Robustness Scores (RRS).
+- **Pre-Inference AST Canonicalizer (`coderobust.mitigation`)**: Restores 100% clean baseline performance by canonicalizing perturbed prompts prior to inference, neutralizing semantic variance.
+
+---
+
+## 3. Directory Structure
 
 ```text
-C:\Users\anush\Desktop\research\coderobust\
+coderobust/
 ├── requirements.txt                    # Python dependencies
 ├── README.md                           # Documentation & replication guide
 ├── run_experiments.py                  # Master evaluation CLI
@@ -91,29 +101,33 @@ C:\Users\anush\Desktop\research\coderobust\
 
 ---
 
-## 3. Quick Start & Execution
+## 4. Reproduction Instructions & Quick Start
 
-### Step 1: Run Automated Unit Tests
-```powershell
-cd C:\Users\anush\Desktop\research\coderobust
-pytest tests
+### Step 1: Install Dependencies
+```bash
+pip install -r requirements.txt
 ```
 
-### Step 2: Run Full Benchmark Suite (Offline Deterministic Mode)
+### Step 2: Run Automated Unit Tests
+```bash
+pytest tests/ -v
+```
+
+### Step 3: Run Full Benchmark Suite (Offline Deterministic Mode)
 Runs instant evaluation across all 6 experimental conditions and exports the LaTeX results table in `<0.1s`:
-```powershell
+```bash
 python run_experiments.py --backend mock
 ```
 
-### Step 3: Run Live Evaluation with Local Ollama (`qwen3:8b`)
+### Step 4: Run Live Evaluation with Local Ollama (`qwen3:8b`)
 Runs live generation through your local Ollama daemon:
-```powershell
+```bash
 python run_experiments.py --backend ollama --model qwen3:8b --limit 4
 ```
 
 ---
 
-## 4. Empirical Evaluation Table
+## 5. Empirical Evaluation Table
 
 | Condition | Pass@1 | $\Delta$ Pass@1 | Relative Robustness Score (RRS) | Entropy Drift ($\Delta H$) |
 | :--- | :---: | :---: | :---: | :---: |
