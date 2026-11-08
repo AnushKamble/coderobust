@@ -2,7 +2,10 @@
 \usepackage[margin=0.75in]{geometry}
 \usepackage{times}
 \usepackage{microtype}
+\usepackage{balance}
 \usepackage{booktabs}
+\setlength{\dbltextfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{graphicx}
@@ -63,39 +66,40 @@ To investigate these questions, we construct \textbf{CodeRobust}. We formalize a
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
     font=\sffamily\footnotesize,
-    box/.style={draw=blue!70!black, thick, rounded corners=3pt, fill=blue!5, align=center, inner sep=6pt, minimum width=2.6cm, minimum height=1.0cm},
-    mutbox/.style={draw=red!70!black, thick, rounded corners=3pt, fill=red!5, align=center, inner sep=4pt, minimum width=3.6cm, minimum height=0.65cm},
-    canonbox/.style={draw=green!60!black, thick, rounded corners=3pt, fill=green!8, align=center, inner sep=6pt, minimum width=3.8cm, minimum height=1.2cm},
-    modelbox/.style={draw=purple!80!black, thick, rounded corners=3pt, fill=purple!5, align=center, inner sep=6pt, minimum width=3.0cm, minimum height=1.0cm},
-    evalbox/.style={draw=orange!80!black, thick, rounded corners=3pt, fill=orange!5, align=center, inner sep=6pt, minimum width=3.2cm, minimum height=1.0cm},
+    stagebox/.style={thick, rounded corners=3pt, align=center, inner sep=4pt, text width=4.8cm, minimum height=1.5cm},
+    box/.style={stagebox, draw=blue!70!black, fill=blue!5},
+    mutbox/.style={draw=red!70!black, thick, rounded corners=3pt, fill=red!5, align=center, inner sep=3pt, text width=4.8cm, minimum height=0.72cm},
+    canonbox/.style={stagebox, draw=green!60!black, fill=green!8},
+    modelbox/.style={stagebox, draw=purple!80!black, fill=purple!5},
+    evalbox/.style={stagebox, draw=orange!80!black, fill=orange!5},
     arr/.style={-{Stealth[scale=1.1]}, thick, draw=gray!80!black},
     mitarr/.style={-{Stealth[scale=1.1]}, thick, draw=green!60!black},
     unmitarr/.style={-{Stealth[scale=1.1]}, thick, draw=red!70!black, dashed}
 ]
 
-% Stage 1: Source input
-\node[box] (src) at (0, 0) {\textbf{Canonical Spec}\\\scriptsize Benchmark $P=(T, S)$};
+% Stage 1: Source input (x = 0.0, y = 0)
+\node[box] (src) at (0.0, 0) {\textbf{Canonical Specification}\\\scriptsize HumanEval+ Benchmark $P=(T, S)$\\\scriptsize Python AST Representation\\\scriptsize Unperturbed Clean Prompts};
 
-% Stage 2: Mutation Suite
-\node[mutbox] (m1) at (5.0, 1.8) {\textbf{T1: $\phi_\alpha$ Alpha-Renaming}\\\tiny Scramble Local Registers};
-\node[mutbox] (m2) at (5.0, 0.9) {\textbf{T2: $\phi_\delta$ Dead-Code Injection}\\\tiny Insert Inert Assertions};
-\node[mutbox] (m3) at (5.0, 0.0) {\textbf{T3: $\phi_\kappa$ Constant Folding}\\\tiny Expand Scalar Arithmetic};
-\node[mutbox] (m4) at (5.0, -0.9) {\textbf{T4: $\phi_\tau$ Docstring Perturb.}\\\tiny Passive Voice Specification};
-\node[mutbox] (m5) at (5.0, -1.8) {\textbf{T5: $\phi_\Sigma$ Composite Mutation}\\\tiny Compound Operator Chain};
+% Stage 2: Mutation Suite (x = 7.0, uniformly spaced along y at dy = 0.9cm)
+\node[mutbox] (m1) at (7.0, 1.8) {\textbf{T1: $\phi_\alpha$ Alpha-Renaming}\\\tiny Scramble Local Registers};
+\node[mutbox] (m2) at (7.0, 0.9) {\textbf{T2: $\phi_\delta$ Dead-Code Injection}\\\tiny Insert Inert Assertions};
+\node[mutbox] (m3) at (7.0, 0.0) {\textbf{T3: $\phi_\kappa$ Constant Folding}\\\tiny Expand Scalar Arithmetic};
+\node[mutbox] (m4) at (7.0, -0.9) {\textbf{T4: $\phi_\tau$ Docstring Perturb.}\\\tiny Passive Voice Specification};
+\node[mutbox] (m5) at (7.0, -1.8) {\textbf{T5: $\phi_\Sigma$ Composite Mutation}\\\tiny Compound Operator Chain};
 
 % Bounding box for mutations
 \begin{scope}[on background layer]
 \node[draw=red!50!black, dashed, rounded corners=4pt, fit=(m1)(m5), fill=red!2, inner sep=6pt, label=above:{\scriptsize \textbf{Semantics-Preserving AST Perturbation Suite}}] (mutgroup) {};
 \end{scope}
 
-% Stage 3: Pre-Inference Canonicalizer
-\node[canonbox] (canon) at (10.8, -1.0) {\textbf{Defensive AST Canonicalizer $\mathcal{C}$}\\\scriptsize $\bullet$ Prune Dead Conditional Subtrees\\\scriptsize $\bullet$ Fold Constant Scalar Expressions\\\scriptsize $\bullet$ Standardize Identifier Registers};
+% Stage 3: Pre-Inference Canonicalizer (x = 14.0, y = 0)
+\node[canonbox] (canon) at (14.0, 0) {\textbf{Defensive Canonicalizer $\mathcal{C}$}\\\scriptsize $\bullet$ Prune Dead Conditional Subtrees\\\scriptsize $\bullet$ Fold Constant Scalar Expressions\\\scriptsize $\bullet$ Standardize Register Names};
 
-% Stage 4: Model Execution
-\node[modelbox] (model) at (16.2, 0) {\textbf{Quantized Code LLM}\\\scriptsize 4-bit NF4 / INT8 / FP16\\\scriptsize Local RTX GPU Inference};
+% Stage 4: Model Execution (x = 21.0, y = 0)
+\node[modelbox] (model) at (21.0, 0) {\textbf{Quantized Code LLM}\\\scriptsize 4-bit NF4 / INT8 / FP16 Precision\\\scriptsize Local Tensor Core GPU Inference\\\scriptsize Pass@1 Verification Harness};
 
-% Stage 5: Evaluation
-\node[evalbox] (eval) at (21.2, 0) {\textbf{Sandboxed Evaluation}\\\scriptsize $\bullet$ Pass@1 Correctness\\\scriptsize $\bullet$ Relative Robustness ($RRS$)\\\scriptsize $\bullet$ Entropy Drift ($\Delta H$)};
+% Stage 5: Evaluation (x = 28.0, y = 0)
+\node[evalbox] (eval) at (28.0, 0) {\textbf{Sandboxed Verification}\\\scriptsize $\bullet$ Pass@1 Correctness Metric\\\scriptsize $\bullet$ Relative Robustness Score ($RRS$)\\\scriptsize $\bullet$ Shannon Entropy Drift ($\Delta H$)};
 
 % Connections from src to mutators
 \draw[arr] (src) |- (m1);
@@ -104,12 +108,12 @@ To investigate these questions, we construct \textbf{CodeRobust}. We formalize a
 \draw[arr] (src) |- (m4);
 \draw[arr] (src) |- (m5);
 
-% Mitigated path through canonicalizer
-\draw[mitarr] (mutgroup.east |- canon) -- node[above]{\scriptsize Perturbed $T'$} (canon);
-\draw[mitarr] (canon) -| node[pos=0.4, below right]{\scriptsize \textbf{Normalized $T^*$} (80\% Recovery)} (model.south);
+% Mitigated path through canonicalizer (horizontal centerline pipeline)
+\draw[mitarr] (mutgroup.east) -- node[above]{\scriptsize Perturbed $T'$} (canon);
+\draw[mitarr] (canon) -- node[above]{\scriptsize Normalized $T^*$} node[below]{\scriptsize 80\% Recovery} (model);
 
-% Direct unmitigated path
-\draw[unmitarr] (mutgroup.north) -- ++(0, 0.6) -| node[pos=0.28, above]{\scriptsize \textbf{Unmitigated Path} ($-25.0\%$ Pass@1, $+0.35$ bit drift)} (model.north);
+% Direct unmitigated path (overhead bypass)
+\draw[unmitarr] (mutgroup.north) -- ++(0, 0.65) -| node[pos=0.28, above]{\scriptsize \textbf{Unmitigated Path} ($-25.0\%$ Pass@1, $+0.35$ bit drift)} (model.north);
 
 % Model to Eval
 \draw[arr] (model) -- node[above]{\scriptsize Generated $S$} (eval);
@@ -232,8 +236,10 @@ However, structural AST mutations immediately expose deep fragility. Under compo
     \item \textbf{Entropy Drift ($\Delta H$)} correlates directly with functional failure. While FP16 exhibits minimal entropy drift under $\phi_\Sigma$ ($+0.08$ bits), 4-bit entropy expands by \textbf{$+0.35$ bits}. Qualitative inspection reveals that when non-interface variables are renamed, the 4-bit attention mechanism fails to maintain binding associations across long token spans, emitting erratic parameter substitutions and repetitive loops.
 \end{itemize}
 
+\enlargethispage{2\baselineskip}
 \noindent\textbf{RQ3: Effectiveness of Defensive AST Canonicalization.} Applying the Defensive AST Canonicalizer ($\mathcal{C}$) to composite-perturbed prompts before 4-bit inference restores Pass@1 from $57.5\%$ up to \textbf{77.5\%} (Table~\ref{tab:quant_robustness_results}). This represents an immediate recovery of \textbf{80.0\%} of the lost performance margin, raising the Relative Robustness Score to $93.9\%$. Simultaneously, entropy drift is compressed from $+0.35$ bits down to $+0.07$ bits. By normalizing syntax drift prior to tokenization, the defensive canonicalizer protects quantized attention heads from out-of-distribution syntactic features without requiring full-precision de-quantization.
 
+\balance
 \section{Threats to Validity}
 \label{sec:threats}
 
@@ -256,7 +262,12 @@ However, structural AST mutations immediately expose deep fragility. Under compo
 In this paper, we introduced \textbf{CodeRobust}, a formal framework for evaluating the empirical robustness and quantization sensitivity of Code LLMs under structural AST perturbations. Across HumanEval+ benchmarks, we proved that 4-bit quantization amplifies model fragility, causing a $-25.0\%$ Pass@1 degradation and $+0.35$ bit entropy drift under composite AST mutations. Furthermore, we showed that a lightweight pre-inference Defensive AST Canonicalizer recovers $80.0\%$ of lost robustness and restores stable entropy without requiring model de-quantization. CodeRobust provides an actionable methodology for deploying resilient quantized models in real-world software development environments.
 
 \bibliographystyle{plain}
+{\footnotesize
 \begin{thebibliography}{16}
+\footnotesize
+\setlength{\itemsep}{1pt plus 0.5pt}
+\setlength{\parsep}{0pt}
+\setlength{\parskip}{0pt}
 
 \bibitem{austin2021program}
 Jacob Austin, Augustus Odena, Maxwell Nye, et~al. 2021.
@@ -324,5 +335,6 @@ Ce~Zhang, Quanjun Zhang, and Lingming Zhang. 2023.
 \newblock In {\em Proceedings of the 38th IEEE/ACM International Conference on Automated Software Engineering (ASE 2023)}, pages 1421--1433.
 
 \end{thebibliography}
+}
 
 \end{document}
