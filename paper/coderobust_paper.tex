@@ -101,19 +101,19 @@ To investigate these questions, we construct \textbf{CodeRobust}. We formalize a
 % Stage 5: Evaluation (x = 28.0, y = 0)
 \node[evalbox] (eval) at (28.0, 0) {\textbf{Sandboxed Verification}\\\scriptsize $\bullet$ Pass@1 Correctness Metric\\\scriptsize $\bullet$ Relative Robustness Score ($RRS$)\\\scriptsize $\bullet$ Shannon Entropy Drift ($\Delta H$)};
 
-% Connections from src to mutators
-\draw[arr] (src) |- (m1);
-\draw[arr] (src) |- (m2);
-\draw[arr] (src) -- (m3);
-\draw[arr] (src) |- (m4);
-\draw[arr] (src) |- (m5);
+% Connections from src to mutators (branching cleanly from src.east)
+\draw[arr] (src.east) -- ++(0.8, 0) |- (m1.west);
+\draw[arr] (src.east) -- ++(0.8, 0) |- (m2.west);
+\draw[arr] (src.east) -- (m3.west);
+\draw[arr] (src.east) -- ++(0.8, 0) |- (m4.west);
+\draw[arr] (src.east) -- ++(0.8, 0) |- (m5.west);
 
 % Mitigated path through canonicalizer (horizontal centerline pipeline)
 \draw[mitarr] (mutgroup.east) -- node[above]{\scriptsize Perturbed $T'$} (canon);
 \draw[mitarr] (canon) -- node[above]{\scriptsize Normalized $T^*$} node[below]{\scriptsize 80\% Recovery} (model);
 
-% Direct unmitigated path (overhead bypass)
-\draw[unmitarr] (mutgroup.north) -- ++(0, 0.65) -| node[pos=0.28, above]{\scriptsize \textbf{Unmitigated Path} ($-25.0\%$ Pass@1, $+0.35$ bit drift)} (model.north);
+% Direct unmitigated path (overhead bypass clear of mutgroup label)
+\draw[unmitarr] (mutgroup.east |- m1) -- ++(0.4, 0) |- ++(0, 1.32) -| node[pos=0.28, above]{\scriptsize \textbf{Unmitigated Path} ($-25.0\%$ Pass@1, $+0.35$ bit drift)} (model.north);
 
 % Model to Eval
 \draw[arr] (model) -- node[above]{\scriptsize Generated $S$} (eval);
