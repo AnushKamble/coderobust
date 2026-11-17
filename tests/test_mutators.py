@@ -74,3 +74,13 @@ def test_canonicalizer_folds_and_prunes():
     assert "if False:" not in canonical
     assert "val = 0" in canonical
     assert "return val + 1" in canonical
+
+def test_canonicalizer_standardizes_registers():
+    from coderobust.mitigation.canonicalizer import ASTCanonicalizer
+    code = "def process(numbers: List[float], limit: float) -> bool:\n    temp_accum = 0\n    for idx, elem in enumerate(numbers):\n        diff = elem - limit\n        temp_accum += diff\n    return temp_accum > 0\n"
+    canonical = ASTCanonicalizer.canonicalize(code, standardize_registers=True)
+    assert "def process(numbers: List[float], limit: float) -> bool:" in canonical
+    assert "_v1 = 0" in canonical
+    assert "_v2, _v3" in canonical
+    assert "_v4 = _v3 - limit" in canonical
+    assert "_v1 += _v4" in canonical

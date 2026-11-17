@@ -6,10 +6,13 @@ import re
 from typing import Dict, Any, List
 
 def extract_python_code(raw_response: str) -> str:
-    """Extracts python code blocks from markdown responses."""
-    match = re.search(r"```(?:python)?\s*(.*?)\s*```", raw_response, re.DOTALL | re.IGNORECASE)
+    """Extracts python code blocks from markdown responses, preserving internal indentation."""
+    match = re.search(r"```(?:python)?[ \t]*\r?\n(.*?)\r?\n```", raw_response, re.DOTALL | re.IGNORECASE)
     if match:
-        return match.group(1).strip()
+        return match.group(1).rstrip()
+    fallback = re.search(r"```(?:python)?\s*(.*?)\s*```", raw_response, re.DOTALL | re.IGNORECASE)
+    if fallback:
+        return fallback.group(1).rstrip()
     return raw_response.strip()
 
 def execute_code_sandbox(code_str: str, test_assertions: str, timeout_seconds: float = 3.0) -> Dict[str, Any]:

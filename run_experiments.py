@@ -69,6 +69,10 @@ def run_evaluation_suite(backend_name: str = "mock",
             raw_resp = gen_res.get("response", "")
             extracted_code = extract_python_code(raw_resp)
             if f"def {prob.entry_point}" not in extracted_code:
+                first_line = next((l for l in extracted_code.splitlines() if l.strip()), "")
+                if first_line and not first_line.startswith(" "):
+                    import textwrap
+                    extracted_code = textwrap.indent(extracted_code, "    ")
                 full_code = f"{perturbed_prompt}\n{extracted_code}"
             else:
                 full_code = extracted_code
@@ -103,7 +107,7 @@ def run_evaluation_suite(backend_name: str = "mock",
     for prob in problems:
         # Apply composite perturbation, then defensive canonicalizer
         perturbed = ASTPerturbationEngine.perturb(prob.prompt, "composite")
-        canonicalized = ASTCanonicalizer.canonicalize(perturbed)
+        canonicalized = ASTCanonicalizer.canonicalize(perturbed, standardize_registers=True)
 
         t0 = time.perf_counter()
         gen_res = model.generate(canonicalized, temperature=0.2)
@@ -112,6 +116,10 @@ def run_evaluation_suite(backend_name: str = "mock",
         raw_resp = gen_res.get("response", "")
         code = extract_python_code(raw_resp)
         if f"def {prob.entry_point}" not in code:
+            first_line = next((l for l in code.splitlines() if l.strip()), "")
+            if first_line and not first_line.startswith(" "):
+                import textwrap
+                code = textwrap.indent(code, "    ")
             full_code = f"{canonicalized}\n{code}"
         else:
             full_code = code

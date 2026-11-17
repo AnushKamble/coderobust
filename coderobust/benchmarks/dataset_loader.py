@@ -130,9 +130,43 @@ assert below_zero([1, -2, 2, -2, 5, -5, 2]) == True
     )
 ]
 
+import gzip
+import json
+import os
+from pathlib import Path
+
+def _load_humaneval_problems() -> List[BenchmarkProblem]:
+    """Loads genuine HumanEval problems from cached data file or returns fallback."""
+    curr_dir = Path(__file__).resolve().parent
+    data_file = curr_dir / "data" / "HumanEval.jsonl.gz"
+    
+    if data_file.exists():
+        try:
+            problems = []
+            with gzip.open(data_file, "rt", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        obj = json.loads(line)
+                        ep = obj["entry_point"]
+                        test_str = obj["test"]
+                        if f"check({ep})" not in test_str:
+                            test_str = test_str + f"\ncheck({ep})\n"
+                        problems.append(BenchmarkProblem(
+                            task_id=obj["task_id"],
+                            prompt=obj["prompt"],
+                            entry_point=ep,
+                            canonical_solution=obj["canonical_solution"],
+                            test_assertions=test_str
+                        ))
+            if problems:
+                return problems
+        except Exception:
+            pass
+    return STANDARDIZED_PROBLEMS
+
 def get_benchmark_dataset(benchmark_name: str = "humaneval", limit: int = None) -> List[BenchmarkProblem]:
     """Retrieves benchmark test instances."""
-    data = STANDARDIZED_PROBLEMS
+    data = _load_humaneval_problems()
     if limit:
         return data[:limit]
     return data
