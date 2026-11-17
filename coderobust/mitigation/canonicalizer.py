@@ -12,22 +12,63 @@ class ASTCanonicalizer:
     """
     @classmethod
     def canonicalize(cls, code_str: str, standardize_registers: bool = False) -> str:
+        code, _ = cls.canonicalize_with_mapping(code_str, standardize_registers=standardize_registers)
+        return code
+
+    @classmethod
+    def canonicalize_with_mapping(cls, code_str: str, standardize_registers: bool = False) -> tuple[str, Dict[str, str]]:
+        """
+        Canonicalize code and return the forward mapping {original_identifier: standardized_register}.
+        Enables bidirectional inversion post-inference.
+        """
+        mapping: Dict[str, str] = {}
         try:
             tree = ast.parse(code_str)
-            # Phase 1: Strip dead If(False) blocks
             cleaned_tree = cls._strip_dead_blocks(tree)
-            # Phase 2: Fold trivial algebraic constants (e.g., (1 - 1) -> 0, (2 - 1) -> 1)
             folded_tree = cls._fold_constants(cleaned_tree)
-            # Phase 3: Standardize non-interface local registers if requested
             if standardize_registers:
-                folded_tree = cls._standardize_registers(folded_tree)
-            # Fix AST locations & unparse
+                folded_tree, mapping = cls._standardize_registers(folded_tree)
             ast.fix_missing_locations(folded_tree)
             canonical_code = ast.unparse(folded_tree)
-            # Standardize whitespace
-            return re.sub(r'\n\s*\n', '\n', canonical_code).strip()
+            return re.sub(r'\n\s*\n', '\n', canonical_code).strip(), mapping
         except Exception:
+            return code_str, mapping
+
+    @classmethod
+    def decanonicalize(cls, code_str: str, mapping: Dict[str, str]) -> str:
+        """
+        Phase 4 (Inversion): Re-maps standardized registers back to original or idiomatic
+        identifiers, completely preserving developer code readability and interface hygiene.
+        """
+        if not mapping:
             return code_str
+        try:
+            tree = ast.parse(code_str)
+            reverse_mapping = {v: k for k, v in mapping.items()}
+
+            class RegisterInverter(ast.NodeTransformer):
+                def visit_Name(self, node: ast.Name) -> ast.Name:
+                    if node.id in reverse_mapping:
+                        return ast.copy_location(ast.Name(id=reverse_mapping[node.id], ctx=node.ctx), node)
+                    return node
+
+                def visit_Global(self, node: ast.Global) -> ast.Global:
+                    node.names = [reverse_mapping.get(n, n) for n in node.names]
+                    return node
+
+                def visit_Nonlocal(self, node: ast.Nonlocal) -> ast.Nonlocal:
+                    node.names = [reverse_mapping.get(n, n) for n in node.names]
+                    return node
+
+            inverted_tree = RegisterInverter().visit(tree)
+            ast.fix_missing_locations(inverted_tree)
+            return ast.unparse(inverted_tree)
+        except Exception:
+            # Fallback to regex substitution if AST parsing fails on incomplete generation
+            inverted = code_str
+            for orig, std in mapping.items():
+                inverted = re.sub(r'\b' + re.escape(std) + r'\b', orig, inverted)
+            return inverted
 
     @classmethod
     def _strip_dead_blocks(cls, tree: ast.AST) -> ast.AST:
@@ -58,12 +99,13 @@ class ASTCanonicalizer:
         return ConstantFolder().visit(tree)
 
     @classmethod
-    def _standardize_registers(cls, tree: ast.AST, prefix: str = "_v") -> ast.AST:
+    def _standardize_registers(cls, tree: ast.AST, prefix: str = "_v") -> tuple[ast.AST, Dict[str, str]]:
         """
         Phase 3: Identifier Register Standardization via ast.NodeTransformer.
         Remaps non-interface local variables and inner parameters to standardized
         lexical registers (_v1, _v2, ...) while strictly preserving public interface
         entrypoints, parameter keywords, type annotations, imports, and builtins.
+        Returns transformed AST and mapping dictionary.
         """
         class RegisterStandardizer(ast.NodeTransformer):
             def __init__(self):
@@ -144,4 +186,6 @@ class ASTCanonicalizer:
                     self.mapping[node.id] = f"{self.prefix}{self.counter}"
                 return ast.copy_location(ast.Name(id=self.mapping[node.id], ctx=node.ctx), node)
 
-        return RegisterStandardizer().visit(tree)
+        standardizer = RegisterStandardizer()
+        transformed = standardizer.visit(tree)
+        return transformed, standardizer.mapping
