@@ -108,7 +108,7 @@ class DeterministicMockModel:
                     import hashlib
                     h = int(hashlib.md5((prompt + ep).encode()).hexdigest(), 16) % 100
                     if h < 25:
-                        response_code = adapted_sol.replace("return", "pass\n    return")
+                        response_code = adapted_sol.replace("return ", "return None  # Syntax drift induced regression\n    return ")
                     else:
                         response_code = adapted_sol
                 else:

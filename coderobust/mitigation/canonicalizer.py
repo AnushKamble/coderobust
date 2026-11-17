@@ -93,10 +93,23 @@ class ASTCanonicalizer:
                         self.preserved.add(alias.asname)
                 return node
 
-            def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+            def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
                 self.preserved.add(node.name)
-                # Keep top-level signature arguments preserved to maintain API contract
-                for arg in node.args.args:
+                return self.generic_visit(node)
+
+            def _preserve_fn_signature(self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]):
+                self.preserved.add(node.name)
+                all_args = list(node.args.args)
+                if hasattr(node.args, "posonlyargs"):
+                    all_args.extend(node.args.posonlyargs)
+                if hasattr(node.args, "kwonlyargs"):
+                    all_args.extend(node.args.kwonlyargs)
+                if node.args.vararg:
+                    all_args.append(node.args.vararg)
+                if node.args.kwarg:
+                    all_args.append(node.args.kwarg)
+
+                for arg in all_args:
                     self.interface_params.add(arg.arg)
                     if arg.annotation:
                         for sub in ast.walk(arg.annotation):
@@ -104,7 +117,22 @@ class ASTCanonicalizer:
                 if node.returns:
                     for sub in ast.walk(node.returns):
                         self.annotation_nodes.add(id(sub))
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+                self._preserve_fn_signature(node)
                 return self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
+                self._preserve_fn_signature(node)
+                return self.generic_visit(node)
+
+            def visit_Global(self, node: ast.Global) -> ast.Global:
+                node.names = [self.mapping.get(n, n) for n in node.names]
+                return node
+
+            def visit_Nonlocal(self, node: ast.Nonlocal) -> ast.Nonlocal:
+                node.names = [self.mapping.get(n, n) for n in node.names]
+                return node
 
             def visit_Name(self, node: ast.Name) -> ast.Name:
                 if id(node) in self.annotation_nodes:

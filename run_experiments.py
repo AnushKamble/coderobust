@@ -31,7 +31,7 @@ PERTURBATION_SUITE = [
 ]
 
 def run_evaluation_suite(backend_name: str = "mock", 
-                         model_name: str = "qwen3:8b", 
+                         model_name: str = "qwen2.5-coder:7b", 
                          benchmark_name: str = "humaneval", 
                          limit: int = None) -> Dict[str, Any]:
     
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CodeRobust Master Experiment Runner")
     parser.add_argument("--backend", default="mock", choices=["mock", "ollama"],
                         help="Inference backend: 'mock' (instant deterministic offline test) or 'ollama' (live local model)")
-    parser.add_argument("--model", default="qwen3:8b", help="Model name for Ollama (default: qwen3:8b)")
+    parser.add_argument("--model", default="qwen2.5-coder:7b", help="Model name for Ollama (default: qwen2.5-coder:7b)")
     parser.add_argument("--benchmark", default="humaneval", choices=["humaneval"], help="Benchmark dataset")
     parser.add_argument("--limit", type=int, default=None, help="Optional limit on tasks")
     args = parser.parse_args()
