@@ -57,3 +57,17 @@ def solve_puzzle(initial_state: int) -> int:
     assert "internal_accumulator" in decanonical
     assert "scratch_buffer" in decanonical
     assert "_v" not in decanonical
+
+
+def test_fold_constants_before_dead_block_removal():
+    """Ensure arithmetic guards like (1 - 1) are folded before dead block stripping."""
+    code = """
+def process(x: int) -> int:
+    if 1 - 1:
+        dead_val = 999
+    return x * 3
+"""
+    canonical = ASTCanonicalizer.canonicalize(code)
+    assert "dead_val" not in canonical
+    assert "999" not in canonical
+    assert "return x * 3" in canonical

@@ -6,8 +6,8 @@ from typing import Set, Dict, Union
 class ASTCanonicalizer:
     """
     Defensive pre-inference AST canonicalizer.
-    Normalizes syntactic drift, strips injected dead code (Phase 1),
-    folds trivial constant expressions (Phase 2), and standardizes
+    Normalizes syntactic drift, folds trivial constant expressions (Phase 1),
+    strips injected dead code (Phase 2), and standardizes
     non-interface local identifier registers (Phase 3) before prompt tokenization.
     """
     @classmethod
@@ -24,12 +24,13 @@ class ASTCanonicalizer:
         mapping: Dict[str, str] = {}
         try:
             tree = ast.parse(code_str)
-            cleaned_tree = cls._strip_dead_blocks(tree)
-            folded_tree = cls._fold_constants(cleaned_tree)
+            folded_tree = cls._fold_constants(tree)
+            cleaned_tree = cls._strip_dead_blocks(folded_tree)
+            final_tree = cleaned_tree
             if standardize_registers:
-                folded_tree, mapping = cls._standardize_registers(folded_tree)
-            ast.fix_missing_locations(folded_tree)
-            canonical_code = ast.unparse(folded_tree)
+                final_tree, mapping = cls._standardize_registers(cleaned_tree)
+            ast.fix_missing_locations(final_tree)
+            canonical_code = ast.unparse(final_tree)
             return re.sub(r'\n\s*\n', '\n', canonical_code).strip(), mapping
         except Exception:
             return code_str, mapping
@@ -94,6 +95,8 @@ class ASTCanonicalizer:
                             return ast.copy_location(ast.Constant(value=node.left.value - node.right.value), node)
                         elif isinstance(node.op, ast.Add):
                             return ast.copy_location(ast.Constant(value=node.left.value + node.right.value), node)
+                        elif isinstance(node.op, ast.Mult):
+                            return ast.copy_location(ast.Constant(value=node.left.value * node.right.value), node)
                 return node
 
         return ConstantFolder().visit(tree)
